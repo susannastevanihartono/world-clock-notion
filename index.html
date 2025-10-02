@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Widget Jam Dunia Ultimate</title>
+    <style>
+        /* CSS untuk tampilan yang ringkas dan modern */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        :root { --shadow-color: rgba(0, 0, 0, 0.06); }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: transparent;
+            margin: 0; padding: 15px; box-sizing: border-box;
+        }
+        .widget-container { max-width: 100%; margin: 0 auto; }
+        .clock-grid {
+            display: grid;
+            /* Kunci untuk layout horizontal: lebar minimum kecil, bisa membesar */
+            grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+            gap: 15px;
+        }
+        .clock-card {
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 3px 12px var(--shadow-color);
+            border: 1px solid #EAEAEA;
+            position: relative;
+            transition: transform 0.2s ease;
+            overflow: hidden;
+        }
+        .clock-card:hover { transform: translateY(-3px); }
+        .city-name {
+            font-size: 14px; font-weight: 600; color: #1a1a1a; margin: 0 0 5px 0;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .time { font-size: 28px; font-weight: 700; color: #1a1a1a; margin: 0; }
+        .date { font-size: 11px; color: #666; margin: 2px 0 8px 0; }
+        .gmt-offset {
+            font-size: 10px; color: #888; background-color: #f5f5f5;
+            padding: 2px 6px; border-radius: 6px; display: inline-block;
+        }
+        .remove-btn {
+            position: absolute; top: 5px; right: 5px; width: 20px; height: 20px;
+            border: none; background: #f0f0f0; border-radius: 50%; cursor: pointer;
+            font-size: 12px; color: #888; display: flex; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity 0.2s ease;
+        }
+        .clock-card:hover .remove-btn { opacity: 1; }
+        .add-clock-btn {
+            display: flex; align-items: center; justify-content: center;
+            background-color: #fdfdfd; border: 1.5px dashed #dcdcdc; color: #888;
+            border-radius: 10px; cursor: pointer; transition: all 0.2s ease;
+            min-height: 120px; font-size: 14px; font-weight: 500;
+        }
+        .add-clock-btn:hover { background-color: #f7f7f7; border-color: #ccc; color: #555; }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center; z-index: 1000;
+            opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-overlay.visible { opacity: 1; visibility: visible; }
+        .modal-content {
+            background: #f8f9fa; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+            display: flex; flex-direction: column; transform: scale(0.95); transition: transform 0.3s ease;
+        }
+        .modal-overlay.visible .modal-content { transform: scale(1); }
+        .modal-header { font-size: 18px; font-weight: 600; margin: 0 0 15px 0; }
+        #search-city {
+            width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #ccc;
+            margin-bottom: 15px; font-size: 16px; box-sizing: border-box;
+        }
+        #city-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; max-height: 50vh; }
+        #city-list li { padding: 12px 10px; cursor: pointer; border-radius: 6px; transition: background-color 0.2s ease; }
+        #city-list li:hover { background-color: #e9ecef; }
+    </style>
+</head>
+<body>
+
+<div class="widget-container">
+    <div class="clock-grid" id="clock-grid"></div>
+</div>
+
+<div class="modal-overlay" id="add-clock-modal">
+    <div class="modal-content">
+        <p class="modal-header">Pilih Kota untuk Ditambahkan</p>
+        <input type="text" id="search-city" placeholder="Cari kota atau negara...">
+        <ul id="city-list"></ul>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- DATABASE TIMEZONE SUPER LENGKAP V2 ---
+    const TIMEZONE_MAP = {
+        // Asia
+        'Abu Dhabi': 'Asia/Dubai', 'Amman': 'Asia/Amman', 'Ankara': 'Europe/Istanbul', 'Baghdad': 'Asia/Baghdad', 'Bangkok': 'Asia/Bangkok', 'Beijing': 'Asia/Shanghai', 'Beirut': 'Asia/Beirut', 'Bengaluru': 'Asia/Kolkata', 'Colombo': 'Asia/Colombo', 'Dhaka': 'Asia/Dhaka', 'Doha': 'Asia/Qatar', 'Dubai': 'Asia/Dubai', 'Hanoi': 'Asia/Ho_Chi_Minh', 'Ho Chi Minh': 'Asia/Ho_Chi_Minh', 'Hong Kong': 'Asia/Hong_Kong', 'Islamabad': 'Asia/Karachi', 'Istanbul': 'Europe/Istanbul', 'Jakarta': 'Asia/Jakarta', 'Jayapura': 'Asia/Jayapura', 'Jerusalem': 'Asia/Jerusalem', 'Kabul': 'Asia/Kabul', 'Karachi': 'Asia/Karachi', 'Kathmandu': 'Asia/Kathmandu', 'Kolkata': 'Asia/Kolkata', 'Kuala Lumpur': 'Asia/Kuala_Lumpur', 'Kuwait City': 'Asia/Kuwait', 'Makassar': 'Asia/Makassar', 'Manila': 'Asia/Manila', 'Mekkah': 'Asia/Riyadh', 'Mumbai': 'Asia/Kolkata', 'Muscat': 'Asia/Muscat', 'New Delhi': 'Asia/Kolkata', 'Phnom Penh': 'Asia/Phnom_Penh', 'Pyongyang': 'Asia/Pyongyang', 'Riyadh': 'Asia/Riyadh', 'Seoul': 'Asia/Seoul', 'Shanghai': 'Asia/Shanghai', 'Singapura': 'Asia/Singapore', 'Taipei': 'Asia/Taipei', 'Tashkent': 'Asia/Tashkent', 'Tehran': 'Asia/Tehran', 'Tokyo': 'Asia/Tokyo', 'Ulaanbaatar': 'Asia/Ulaanbaatar', 'Yangon': 'Asia/Yangon',
+        // Afrika
+        'Accra': 'Africa/Accra', 'Addis Ababa': 'Africa/Addis_Ababa', 'Algiers': 'Africa/Algiers', 'Kairo': 'Africa/Cairo', 'Casablanca': 'Africa/Casablanca', 'Dakar': 'Africa/Dakar', 'Dar es Salaam': 'Africa/Dar_es_Salaam', 'Harare': 'Africa/Harare', 'Johannesburg': 'Africa/Johannesburg', 'Kampala': 'Africa/Kampala', 'Khartoum': 'Africa/Khartoum', 'Kinshasa': 'Africa/Kinshasa', 'Lagos': 'Africa/Lagos', 'Maputo': 'Africa/Maputo', 'Mogadishu': 'Africa/Mogadishu', 'Nairobi': 'Africa/Nairobi', 'Tripoli': 'Africa/Tripoli', 'Tunis': 'Africa/Tunis',
+        // Eropa
+        'Amsterdam': 'Europe/Amsterdam', 'Athens': 'Europe/Athens', 'Belgrade': 'Europe/Belgrade', 'Berlin': 'Europe/Berlin', 'Bratislava': 'Europe/Bratislava', 'Brussels': 'Europe/Brussels', 'Bucharest': 'Europe/Bucharest', 'Budapest': 'Europe/Budapest', 'Kopenhagen': 'Europe/Copenhagen', 'Dublin': 'Europe/Dublin', 'Helsinki': 'Europe/Helsinki', 'Kyiv': 'Europe/Kyiv', 'Lisbon': 'Europe/Lisbon', 'Ljubljana': 'Europe/Ljubljana', 'London': 'Europe/London', 'Luxembourg': 'Europe/Luxembourg', 'Madrid': 'Europe/Madrid', 'Malta': 'Europe/Malta', 'Minsk': 'Europe/Minsk', 'Monaco': 'Europe/Monaco', 'Moskow': 'Europe/Moscow', 'Oslo': 'Europe/Oslo', 'Paris': 'Europe/Paris', 'Praha': 'Europe/Prague', 'Riga': 'Europe/Riga', 'Roma': 'Europe/Rome', 'San Marino': 'Europe/San_Marino', 'Sarajevo': 'Europe/Sarajevo', 'Skopje': 'Europe/Skopje', 'Sofia': 'Europe/Sofia', 'Stockholm': 'Europe/Stockholm', 'Tallinn': 'Europe/Tallinn', 'Tirane': 'Europe/Tirane', 'Vatikan': 'Europe/Vatican', 'Vienna': 'Europe/Vienna', 'Vilnius': 'Europe/Vilnius', 'Warsawa': 'Europe/Warsaw', 'Zagreb': 'Europe/Zagreb', 'Zurich': 'Europe/Zurich',
+        // Amerika Utara
+        'Anchorage': 'America/Anchorage', 'Atlanta': 'America/New_York', 'Boston': 'America/New_York', 'Calgary': 'America/Edmonton', 'Chicago': 'America/Chicago', 'Dallas': 'America/Chicago', 'Denver': 'America/Denver', 'Detroit': 'America/Detroit', 'Edmonton': 'America/Edmonton', 'Guatemala City': 'America/Guatemala', 'Halifax': 'America/Halifax', 'Havana': 'America/Havana', 'Honolulu': 'Pacific/Honolulu', 'Houston': 'America/Chicago', 'Indianapolis': 'America/Indiana/Indianapolis', 'Kingston': 'America/Jamaica', 'Las Vegas': 'America/Los_Angeles', 'Los Angeles': 'America/Los_Angeles', 'Mexico City': 'America/Mexico_City', 'Miami': 'America/New_York', 'Minneapolis': 'America/Chicago', 'Montreal': 'America/Toronto', 'Nassau': 'America/Nassau', 'New Orleans': 'America/Chicago', 'New York': 'America/New_York', 'Ottawa': 'America/Toronto', 'Panama City': 'America/Panama', 'Philadelphia': 'America/New_York', 'Phoenix': 'America/Phoenix', 'San Francisco': 'America/Los_Angeles', 'Seattle': 'America/Los_Angeles', 'St. John\'s': 'America/St_Johns', 'Tegucigalpa': 'America/Tegucigalpa', 'Toronto': 'America/Toronto', 'Vancouver': 'America/Vancouver', 'Washington DC': 'America/New_York', 'Winnipeg': 'America/Winnipeg',
+        // Amerika Selatan
+        'Asuncion': 'America/Asuncion', 'Bogota': 'America/Bogota', 'Brasilia': 'America/Sao_Paulo', 'Buenos Aires': 'America/Argentina/Buenos_Aires', 'Caracas': 'America/Caracas', 'Cayenne': 'America/Cayenne', 'La Paz': 'America/La_Paz', 'Lima': 'America/Lima', 'Montevideo': 'America/Montevideo', 'Paramaribo': 'America/Paramaribo', 'Quito': 'America/Guayaquil', 'Rio de Janeiro': 'America/Sao_Paulo', 'Santiago': 'America/Santiago', 'Sao Paulo': 'America/Sao_Paulo',
+        // Australia & Oseania
+        'Adelaide': 'Australia/Adelaide', 'Auckland': 'Pacific/Auckland', 'Brisbane': 'Australia/Brisbane', 'Canberra': 'Australia/Sydney', 'Christchurch': 'Pacific/Auckland', 'Darwin': 'Australia/Darwin', 'Fiji': 'Pacific/Fiji', 'Guam': 'Pacific/Guam', 'Hobart': 'Australia/Hobart', 'Melbourne': 'Australia/Melbourne', 'Perth': 'Australia/Perth', 'Port Moresby': 'Pacific/Port_Moresby', 'Sydney': 'Australia/Sydney', 'Wellington': 'Pacific/Auckland',
+        // Lainnya
+        'UTC': 'UTC'
+    };
+    const ALL_CITIES = Object.keys(TIMEZONE_MAP).sort();
+
+    const clockGrid = document.getElementById('clock-grid');
+    const modal = document.getElementById('add-clock-modal');
+    const searchInput = document.getElementById('search-city');
+    const cityList = document.getElementById('city-list');
+    let displayedClocks = [];
+
+    const loadClocks = () => {
+        try {
+            const saved = localStorage.getItem('worldClocksV2');
+            displayedClocks = saved ? JSON.parse(saved) : ['Jakarta', 'Tokyo', 'London', 'New York', 'Phoenix'];
+        } catch (e) {
+            displayedClocks = ['Jakarta', 'Tokyo', 'London', 'New York', 'Phoenix'];
+        }
+    };
+
+    const saveClocks = () => localStorage.setItem('worldClocksV2', JSON.stringify(displayedClocks));
+
+    const render = () => {
+        clockGrid.innerHTML = '';
+        const baseTimezone = displayedClocks.length > 0 ? TIMEZONE_MAP[displayedClocks[0]] : 'UTC';
+
+        displayedClocks.forEach((city, index) => {
+            const card = document.createElement('div');
+            card.className = 'clock-card';
+            card.dataset.city = city;
+            const offset = index === 0 ? "Zona Waktu Anda" : getOffsetDifference(baseTimezone, TIMEZONE_MAP[city]);
+            card.innerHTML = `
+                <button class="remove-btn" title="Hapus jam">&times;</button>
+                <p class="city-name">${city}</p>
+                <p class="time">00:00:00</p>
+                <p class="date">...</p>
+                <p class="gmt-offset">${offset}</p>
+            `;
+            clockGrid.appendChild(card);
+        });
+
+        const addButton = document.createElement('div');
+        addButton.className = 'add-clock-btn';
+        addButton.innerHTML = '<span>+ Tambah Kota</span>';
+        clockGrid.appendChild(addButton);
+    };
+
+    const updateTime = () => {
+        const now = new Date();
+        displayedClocks.forEach(city => {
+            const card = clockGrid.querySelector(`.clock-card[data-city="${city}"]`);
+            if (!card) return;
+            const timezone = TIMEZONE_MAP[city];
+            card.querySelector('.time').textContent = now.toLocaleTimeString('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            card.querySelector('.date').textContent = now.toLocaleDateString('id-ID', { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' });
+        });
+    };
+
+    const getOffsetDifference = (baseTz, targetTz) => {
+        if (!baseTz || !targetTz) return "";
+        const now = new Date();
+        const getOffset = tz => (new Date(now.toLocaleString('en-US', {timeZone: tz})).getTime() - new Date(now.toLocaleString('en-US', {timeZone: 'UTC'})).getTime()) / 3600000;
+        const diff = getOffset(targetTz) - getOffset(baseTz);
+        return diff === 0 ? "Waktu Sama" : `${diff > 0 ? '+' : ''}${diff.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 1})} jam`;
+    };
+
+    const populateCityList = (filter = '') => {
+        cityList.innerHTML = '';
+        const available = ALL_CITIES.filter(c => !displayedClocks.includes(c) && c.toLowerCase().includes(filter.toLowerCase()));
+        available.forEach(city => {
+            const li = document.createElement('li');
+            li.textContent = city;
+            li.dataset.city = city;
+            cityList.appendChild(li);
+        });
+    };
+    
+    const showModal = () => { populateCityList(); modal.classList.add('visible'); searchInput.focus(); };
+    const hideModal = () => { modal.classList.remove('visible'); searchInput.value = ''; };
+
+    // Event Listeners
+    clockGrid.addEventListener('click', e => {
+        if (e.target.closest('.add-clock-btn')) showModal();
+        if (e.target.classList.contains('remove-btn')) {
+            const city = e.target.closest('.clock-card').dataset.city;
+            displayedClocks = displayedClocks.filter(c => c !== city);
+            saveClocks();
+            render();
+        }
+    });
+    modal.addEventListener('click', e => { if (e.target === modal) hideModal(); });
+    cityList.addEventListener('click', e => {
+        if (e.target.tagName === 'LI') {
+            displayedClocks.push(e.target.dataset.city);
+            saveClocks();
+            render();
+            hideModal();
+        }
+    });
+    searchInput.addEventListener('input', () => populateCityList(searchInput.value));
+
+    // Inisialisasi
+    loadClocks();
+    render();
+    setInterval(updateTime, 1000);
+    updateTime();
+});
+</script>
+
+</body>
+</html>
+
